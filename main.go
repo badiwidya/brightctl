@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -152,40 +153,29 @@ func (b *backlight) read(baseBacklightDir string) error {
 }
 
 func (b *backlight) restore(baseBacklightPath, statePath string) error {
-	brightctlPath := filepath.Join(statePath, "brightctl")
+	lastBrightnessPath := filepath.Join(statePath, "brightctl", "last_brightness")
 
-	err := os.MkdirAll(brightctlPath, 0o0755)
+	buffer, err := os.ReadFile(lastBrightnessPath)
 	if err != nil {
-		return fmt.Errorf("Error: can't make brightctl state dir: %w", err)
+		if errors.Is(err, io.EOF) || errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("error: no saved brightness found")
+		}
+
+		return fmt.Errorf("error: can't read saved brightness: %w", err)
 	}
 
-	stateFile, err := os.OpenFile(filepath.Join(brightctlPath, "last_brightness"), os.O_RDONLY|os.O_CREATE, 0o0644)
+	currStr := strings.TrimSpace(string(buffer))
+
+	currInt, err := strconv.Atoi(currStr)
 	if err != nil {
-		return fmt.Errorf("Error: can't write to brightctl state dir: %w", err)
-	}
-	defer stateFile.Close()
-
-	buffer := make([]byte, 32)
-	n, err := stateFile.Read(buffer)
-	if err != nil && err != io.EOF {
-		return fmt.Errorf("Error: can't read last brightness: %w", err)
+		return fmt.Errorf("error: expected number from %s, but got %s", lastBrightnessPath, currStr)
 	}
 
-	curr, err := strconv.Atoi(strings.TrimSpace(string(buffer[:n])))
-	if err != nil {
-		return fmt.Errorf("Error: bad value: %w", err)
-	}
-
-	b.current = curr
-
-	err = b.set("+0")
-	if err != nil {
-		return fmt.Errorf("Error: failed to restore last brightness: %w", err)
-	}
+	b.current = currInt
 
 	err = b.write(baseBacklightPath, statePath)
 	if err != nil {
-		return fmt.Errorf("Error: failed to restore last brightness: %w", err)
+		return fmt.Errorf("error: failed to restore last brightness: %w", err)
 	}
 
 	return nil
