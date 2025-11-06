@@ -101,15 +101,15 @@ func (b *backlight) write(baseBacklightPath, statePath string) error {
 	return nil
 }
 
-func (b *backlight) read(baseBacklightPath string) error {
-	backlightDir, err := os.ReadDir(baseBacklightPath)
+func (b *backlight) read(baseBacklightDir string) error {
+	backlightDirs, err := os.ReadDir(baseBacklightDir)
 	if err != nil {
-		return fmt.Errorf("Error: can't get device name: %s", err)
+		return fmt.Errorf("error: failed to list %s: %w", baseBacklightDir, err)
 	}
 
 	var devName string
-	for _, entry := range backlightDir {
-		path := filepath.Join(baseBacklightPath, entry.Name())
+	for _, entry := range backlightDirs {
+		path := filepath.Join(baseBacklightDir, entry.Name())
 
 		stat, err := os.Stat(path)
 		if err != nil {
@@ -122,29 +122,26 @@ func (b *backlight) read(baseBacklightPath string) error {
 		}
 	}
 
-	cur, err := os.ReadFile(fmt.Sprintf("%s/%s/brightness", baseBacklightPath, devName))
-	if err != nil {
-		return fmt.Errorf("Error: can't read brightness value: %s", err)
+	if devName == "" {
+		return fmt.Errorf("error: no backlight device found in %s", baseBacklightDir)
 	}
 
-	max, err := os.ReadFile(fmt.Sprintf("%s/%s/max_brightness", baseBacklightPath, devName))
+	brightnessPath := filepath.Join(baseBacklightDir, devName, "brightness")
+	maxBrightnessPath := filepath.Join(baseBacklightDir, devName, "max_brightness")
+
+	cur, err := readIntFromFile(brightnessPath)
 	if err != nil {
-		return fmt.Errorf("Error: can't read brightness value: %s", err)
+		return fmt.Errorf("error: %w", err)
 	}
 
-	currInt, err := strconv.Atoi(strings.TrimSpace(string(cur)))
+	max, err := readIntFromFile(maxBrightnessPath)
 	if err != nil {
-		return fmt.Errorf("Error: can't read brightness value: %s", err)
-	}
-
-	maxInt, err := strconv.Atoi(strings.TrimSpace(string(max)))
-	if err != nil {
-		return fmt.Errorf("Error: can't read brightness value: %s", err)
+		return fmt.Errorf("error: %w", err)
 	}
 
 	b.devName = devName
-	b.current = currInt
-	b.max = maxInt
+	b.current = cur
+	b.max = max
 
 	return nil
 }
@@ -275,4 +272,19 @@ func printUsage(appName string) {
 	fmt.Fprintf(os.Stdout, "	%s set -5%%\n", appName)
 	fmt.Fprintf(os.Stdout, "	%s get\n", appName)
 	fmt.Fprintf(os.Stdout, "	%s restore (to use within a startup script)\n", appName)
+}
+
+func readIntFromFile(path string) (int, error) {
+	buffer, err := os.ReadFile(path)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read file %s: %w", path, err)
+	}
+
+	valStr := strings.TrimSpace(string(buffer))
+	valInt, err := strconv.Atoi(valStr)
+	if err != nil {
+		return 0, fmt.Errorf("expected number from %s, but got %s", path, valStr)
+	}
+
+	return valInt, nil
 }
