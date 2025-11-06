@@ -59,43 +59,48 @@ func (b *backlight) get() float64 {
 	return valPerc
 }
 
-func (b *backlight) write(baseBacklightPath, statePath string) error {
-	brightnessPath := fmt.Sprintf("%s/%s/brightness", baseBacklightPath, b.devName)
+func (b *backlight) write(baseBacklightDir, statePath string) error {
+	brightnessPath := filepath.Join(baseBacklightDir, b.devName, "brightness")
 
 	brightnessFile, err := os.OpenFile(brightnessPath, os.O_WRONLY|os.O_TRUNC, 0o0644)
 	if err != nil {
-		return fmt.Errorf("Error: failed to open brightness file: %w", err)
+		return fmt.Errorf("error: failed to open brightness file: %w", err)
 	}
 	defer brightnessFile.Close()
 
 	_, err = fmt.Fprintf(brightnessFile, "%d", b.current)
 	if err != nil {
-		return fmt.Errorf("Error: failed to write brightness: %w", err)
+		return fmt.Errorf("error: failed to write brightness: %w", err)
 	}
 
-	if statePath == "" {
-		return nil
+	if err := b.saveState(statePath); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: can't save current brightness: %w", err)
 	}
 
-	brightctlPath := filepath.Join(statePath, "brightctl")
+	return nil
+}
 
-	err = os.MkdirAll(brightctlPath, 0o0755)
+func (b *backlight) saveState(stateDir string) error {
+	if stateDir == "" {
+		return fmt.Errorf("state path not set")
+	}
+
+	brightctlPath := filepath.Join(stateDir, "brightctl")
+
+	err := os.MkdirAll(brightctlPath, 0o0755)
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "Warning: can't save current brightness to state dir: %s", err)
-		return nil
+		return fmt.Errorf("couldn't create state directory")
 	}
 
 	stateFile, err := os.Create(filepath.Join(brightctlPath, "last_brightness"))
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "Warning: can't save current brightness to state dir: %s", err)
-		return nil
+		return fmt.Errorf("couldn't create state file")
 	}
 	defer stateFile.Close()
 
 	_, err = fmt.Fprintf(stateFile, "%d", b.current)
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "Warning: can't save current brightness to state dir: %s", err)
-		return nil
+		return fmt.Errorf("couldn't write to state file")
 	}
 
 	return nil
