@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+var appName = ""
+
 type backlight struct {
 	devName string
 	current int
@@ -18,34 +20,54 @@ type backlight struct {
 }
 
 func (b *backlight) set(args string) error {
-	valStr := strings.TrimSuffix(args, "%")
+	args = strings.TrimSpace(args)
 
-	val, err := strconv.ParseFloat(strings.TrimSpace(valStr), 64)
-	if err != nil {
-		return fmt.Errorf("Error: invalid value format")
-	}
+	var isRelative, isPercent bool
 
-	var fact float64
 	if strings.HasSuffix(args, "%") {
-		fact = val / 100
-	} else {
-		fact = val
+		isPercent = true
 	}
-
-	if fact < -1 || fact > 1 {
-		return fmt.Errorf("Error: value should be between 0 to 1 or 0%% to 100%%")
-	}
-
-	val = fact * float64(b.max)
 
 	if strings.HasPrefix(args, "+") || strings.HasPrefix(args, "-") {
-		b.current = b.current + int(val)
+		isRelative = true
+	}
+
+	valStr := args
+	if isPercent {
+		valStr = strings.TrimSuffix(valStr, "%")
+	}
+
+	val, err := strconv.ParseFloat(valStr, 64)
+	if err != nil {
+		return fmt.Errorf("error: invalid argument, expected a number")
+	}
+
+	if isPercent {
+		val = val / 100.0
+	}
+
+	if !isRelative && val < 0 {
+		return fmt.Errorf("error: absolute value cannot be negative")
+	}
+
+	if val > 1 && val < -1 {
+		return fmt.Errorf("error: value must be between +/- 100%% or +/- 1.0")
+	}
+
+	delta := int(val * float64(b.max))
+
+	if isRelative {
+		b.current += delta
 	} else {
-		b.current = int(val)
+		b.current = delta
 	}
 
 	if b.current < 0 {
 		b.current = 0
+	}
+
+	if b.current > b.max {
+		b.current = b.max
 	}
 
 	return nil
