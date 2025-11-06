@@ -11,7 +11,78 @@ import (
 	"strings"
 )
 
-var appName = ""
+const appName = "brightctl"
+
+func main() {
+	if err := run(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
+	const baseBacklightDir = "/sys/class/backlight"
+
+	if len(args) < 1 {
+		printUsage()
+		return fmt.Errorf("error: no command specified")
+	}
+
+	stateDir := getStateDir()
+	bl := &backlight{}
+
+	err := bl.read(baseBacklightDir)
+	if err != nil {
+		return err
+	}
+
+	cmd := args[0]
+	cmdArgs := args[1:]
+
+	switch cmd {
+	case "set":
+		// USAGE: brightctl set ARG
+		if len(cmdArgs) != 1 {
+			printUsage()
+			return fmt.Errorf("error: 'set' requires exactly one argument")
+		}
+
+		err = bl.set(cmdArgs[0])
+		if err != nil {
+			return err
+		}
+
+		err = bl.write(baseBacklightDir, stateDir)
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintln(os.Stdout, "Brightness changed")
+	case "get":
+		// USAGE: brightctl get
+		if len(cmdArgs) != 0 {
+			printUsage()
+			return fmt.Errorf("error: 'get' takes no argument")
+		}
+
+		fmt.Fprintln(os.Stdout, bl.get())
+	case "restore":
+		// USAGE: brightctl restore
+		if len(cmdArgs) != 0 {
+			printUsage()
+			return fmt.Errorf("error: 'restore' takes no argument")
+		}
+
+		err := bl.restore(baseBacklightDir, stateDir)
+		if err != nil {
+			return err
+		}
+	default:
+		printUsage()
+	}
+
+	return nil
+}
 
 type backlight struct {
 	devName string
@@ -82,7 +153,7 @@ func (b *backlight) get() float64 {
 	return valPerc
 }
 
-func (b *backlight) write(baseBacklightDir, statePath string) error {
+func (b *backlight) write(baseBacklightDir, stateDir string) error {
 	brightnessPath := filepath.Join(baseBacklightDir, b.devName, "brightness")
 
 	brightnessFile, err := os.OpenFile(brightnessPath, os.O_WRONLY|os.O_TRUNC, 0o0644)
@@ -96,7 +167,7 @@ func (b *backlight) write(baseBacklightDir, statePath string) error {
 		return fmt.Errorf("error: failed to write brightness: %w", err)
 	}
 
-	if err := b.saveState(statePath); err != nil {
+	if err := b.saveState(stateDir); err != nil {
 		fmt.Fprintln(os.Stderr, "warning: can't save current brightness: %w", err)
 	}
 
@@ -108,14 +179,14 @@ func (b *backlight) saveState(stateDir string) error {
 		return fmt.Errorf("state path not set")
 	}
 
-	brightctlPath := filepath.Join(stateDir, "brightctl")
+	brightctlStateDir := filepath.Join(stateDir, "brightctl")
 
-	err := os.MkdirAll(brightctlPath, 0o0755)
+	err := os.MkdirAll(brightctlStateDir, 0o0755)
 	if err != nil {
 		return fmt.Errorf("couldn't create state directory")
 	}
 
-	stateFile, err := os.Create(filepath.Join(brightctlPath, "last_brightness"))
+	stateFile, err := os.Create(filepath.Join(brightctlStateDir, "last_brightness"))
 	if err != nil {
 		return fmt.Errorf("couldn't create state file")
 	}
@@ -174,8 +245,8 @@ func (b *backlight) read(baseBacklightDir string) error {
 	return nil
 }
 
-func (b *backlight) restore(baseBacklightPath, statePath string) error {
-	lastBrightnessPath := filepath.Join(statePath, "brightctl", "last_brightness")
+func (b *backlight) restore(baseBacklightDir, stateDir string) error {
+	lastBrightnessPath := filepath.Join(stateDir, "brightctl", "last_brightness")
 
 	buffer, err := os.ReadFile(lastBrightnessPath)
 	if err != nil {
@@ -195,7 +266,7 @@ func (b *backlight) restore(baseBacklightPath, statePath string) error {
 
 	b.current = currInt
 
-	err = b.write(baseBacklightPath, statePath)
+	err = b.write(baseBacklightDir, stateDir)
 	if err != nil {
 		return fmt.Errorf("error: failed to restore last brightness: %w", err)
 	}
@@ -203,92 +274,13 @@ func (b *backlight) restore(baseBacklightPath, statePath string) error {
 	return nil
 }
 
-func main() {
-	const baseBacklightPath = "/sys/class/backlight"
-
-	exePath, err := os.Executable()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: can't get binary name\n")
-		os.Exit(1)
-	}
-
-	appName := filepath.Base(exePath)
-
-	args := os.Args[1:]
-	if len(args) < 1 {
-		printUsage(appName)
-		os.Exit(1)
-	}
-
-	statePath := os.Getenv("XDG_STATE_HOME")
-	if statePath == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stdout, "Warning: can't save current brightness to state dir: %s", err)
-		} else {
-			statePath = filepath.Join(homeDir, ".local", "state")
-		}
-	}
-
-	bl := &backlight{}
-
-	err = bl.read(baseBacklightPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	switch args[0] {
-	case "set":
-		if len(args) != 2 {
-			printUsage(appName)
-			os.Exit(1)
-		}
-
-		err = bl.set(args[1])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", err)
-			os.Exit(1)
-		}
-
-		err = bl.write(baseBacklightPath, statePath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Fprintln(os.Stdout, "Brightness changed")
-	case "get":
-		if len(args) != 1 {
-			printUsage(appName)
-			os.Exit(1)
-		}
-
-		fmt.Fprintln(os.Stdout, bl.get())
-	case "restore":
-		if len(args) != 1 {
-			printUsage(appName)
-			os.Exit(1)
-		}
-
-		err := bl.restore(baseBacklightPath, statePath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", err)
-			os.Exit(1)
-		}
-	default:
-		printUsage(appName)
-		os.Exit(1)
-	}
-}
-
-func printUsage(appName string) {
-	fmt.Fprintf(os.Stdout, "Usage:")
-	fmt.Fprintf(os.Stdout, "	%s set 50%%\n", appName)
-	fmt.Fprintf(os.Stdout, "	%s set +5%%\n", appName)
-	fmt.Fprintf(os.Stdout, "	%s set -5%%\n", appName)
-	fmt.Fprintf(os.Stdout, "	%s get\n", appName)
-	fmt.Fprintf(os.Stdout, "	%s restore (to use within a startup script)\n", appName)
+func printUsage() {
+	fmt.Fprintf(os.Stderr, "Usage:")
+	fmt.Fprintf(os.Stderr, "	%s set 50%%\n", appName)
+	fmt.Fprintf(os.Stderr, "	%s set +5%%\n", appName)
+	fmt.Fprintf(os.Stderr, "	%s set -5%%\n", appName)
+	fmt.Fprintf(os.Stderr, "	%s get\n", appName)
+	fmt.Fprintf(os.Stderr, "	%s restore (to use within a startup script)\n", appName)
 }
 
 func readIntFromFile(path string) (int, error) {
@@ -304,4 +296,17 @@ func readIntFromFile(path string) (int, error) {
 	}
 
 	return valInt, nil
+}
+
+func getStateDir() (stateDir string) {
+	stateDir = os.Getenv("XDG_STATE_HOME")
+	if stateDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			stateDir = filepath.Join(homeDir, ".local", "state")
+		}
+	}
+
+	// Let empty if state directory cannot get retrieved
+	return stateDir
 }
