@@ -50,7 +50,7 @@ func (b *backlight) set(args string) error {
 		return fmt.Errorf("error: absolute value cannot be negative")
 	}
 
-	if val > 1 && val < -1 {
+	if val > 1 || val < -1 {
 		return fmt.Errorf("error: value must be between +/- 100%% or +/- 1.0")
 	}
 
