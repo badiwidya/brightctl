@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -52,6 +53,8 @@ func (b *backlight) set(args string) error {
 func (b *backlight) get() float64 {
 	var valPerc float64
 	valPerc = float64(b.current) / float64(b.max)
+
+	valPerc = math.Trunc(valPerc*100) / 100
 
 	return valPerc
 }
