@@ -1,4 +1,4 @@
-package main
+package backlight_test
 
 import (
 	"os"
@@ -6,18 +6,20 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/badiwidya/brightctl/backlight"
 )
 
 const testDeviceName = "bl_device"
 
 func TestGet(t *testing.T) {
-	bl := &backlight{
-		max:     100,
-		current: 25,
+	bl := &backlight.Backlight{
+		Max:     100,
+		Current: 25,
 	}
 
 	want := 0.25
-	got := bl.get()
+	got := bl.GetPercentage()
 
 	if got != want {
 		t.Errorf("want %f; got %f", want, got)
@@ -85,12 +87,12 @@ func TestSet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.Description, func(t *testing.T) {
-			bl := &backlight{
-				max:     100,
-				current: 20,
+			bl := &backlight.Backlight{
+				Max:     100,
+				Current: 20,
 			}
 
-			err := bl.set(tt.Argument)
+			err := bl.Set(tt.Argument)
 
 			if tt.WantErr {
 				requireError(t, err)
@@ -99,51 +101,65 @@ func TestSet(t *testing.T) {
 
 			requireNoError(t, err)
 
-			if bl.current != tt.Want {
-				t.Errorf("want %d; got %d", tt.Want, bl.current)
+			if bl.Current != tt.Want {
+				t.Errorf("want %d; got %d", tt.Want, bl.Current)
 			}
 		})
 	}
 }
 
+func TestSaveState(t *testing.T) {
+	_, stateDir, _, brightctlStateDir := setupTempDirs(t)
+
+	lastBrightnessPath := filepath.Join(brightctlStateDir, "last_brightness")
+
+	bl := &backlight.Backlight{
+		DevName: testDeviceName,
+		Current: 3480,
+	}
+
+	err := bl.SaveState(stateDir)
+	requireNoError(t, err)
+
+	assertContainsInt(t, lastBrightnessPath, bl.Current)
+}
+
 func TestWrite(t *testing.T) {
 	t.Run("success writing to brightness and state file", func(t *testing.T) {
-		sysfsDir, stateDir, blDeviceDir, brightctlStateDir := setupTempDirs(t)
+		sysfsDir, _, blDeviceDir, _ := setupTempDirs(t)
 
 		brightnessPath := filepath.Join(blDeviceDir, "brightness")
-		lastBrightnessPath := filepath.Join(brightctlStateDir, "last_brightness")
 
 		err := os.WriteFile(brightnessPath, nil, 0o0644)
 		requireNoError(t, err)
 
-		bl := &backlight{
-			devName: testDeviceName,
-			current: 3480,
+		bl := &backlight.Backlight{
+			DevName: testDeviceName,
+			Current: 3480,
 		}
 
-		err = bl.write(sysfsDir, stateDir)
+		err = bl.Write(sysfsDir)
 		requireNoError(t, err)
 
-		assertContainsInt(t, brightnessPath, bl.current)
-		assertContainsInt(t, lastBrightnessPath, bl.current)
+		assertContainsInt(t, brightnessPath, bl.Current)
 	})
 
 	t.Run("failed writing to brightness file", func(t *testing.T) {
-		sysfsDir, stateDir, _, _ := setupTempDirs(t)
+		sysfsDir, _, _, _ := setupTempDirs(t)
 
-		bl := &backlight{
-			devName: testDeviceName,
-			current: 2800,
+		bl := &backlight.Backlight{
+			DevName: testDeviceName,
+			Current: 2800,
 		}
 
-		err := bl.write(sysfsDir, stateDir)
+		err := bl.Write(sysfsDir)
 		requireError(t, err)
 
 		assertErrorToContains(t, err, "failed to open brightness")
 	})
 }
 
-func TestRead(t *testing.T) {
+func TestNew(t *testing.T) {
 	t.Run("brightness information retrieved successfully", func(t *testing.T) {
 		sysfsDir, _, blDeviceDir, _ := setupTempDirs(t)
 
@@ -155,30 +171,26 @@ func TestRead(t *testing.T) {
 		err = os.WriteFile(maxBrightnessPath, []byte("100"), 0o0644)
 		requireNoError(t, err)
 
-		bl := &backlight{}
-
-		err = bl.read(sysfsDir)
+		bl, err := backlight.New(sysfsDir)
 		requireNoError(t, err)
 
-		if bl.devName != testDeviceName {
-			t.Errorf("want device name %s; got %s", testDeviceName, bl.devName)
+		if bl.DevName != testDeviceName {
+			t.Errorf("want device name %s; got %s", testDeviceName, bl.DevName)
 		}
 
-		if bl.current != 20 {
-			t.Errorf("want %d; got %d", 20, bl.current)
+		if bl.Current != 20 {
+			t.Errorf("want %d; got %d", 20, bl.Current)
 		}
 
-		if bl.max != 100 {
-			t.Errorf("want %d; got %d", 100, bl.max)
+		if bl.Max != 100 {
+			t.Errorf("want %d; got %d", 100, bl.Max)
 		}
 	})
 
 	t.Run("device not found", func(t *testing.T) {
 		sysfsDir := t.TempDir()
 
-		bl := &backlight{}
-
-		err := bl.read(sysfsDir)
+		_, err := backlight.New(sysfsDir)
 		requireError(t, err)
 
 		assertErrorToContains(t, err, "no backlight device found")
@@ -189,9 +201,7 @@ func TestRead(t *testing.T) {
 
 		sysfsDir := filepath.Join(tmpDir, "backlight")
 
-		bl := &backlight{}
-
-		err := bl.read(sysfsDir)
+		_, err := backlight.New(sysfsDir)
 		requireError(t, err)
 
 		assertErrorToContains(t, err, "failed to list")
@@ -209,13 +219,13 @@ func TestRestore(t *testing.T) {
 	err = os.WriteFile(lastBrightnessPath, []byte("100"), 0o0644)
 	requireNoError(t, err)
 
-	bl := &backlight{
-		devName: testDeviceName,
-		max:     100,
-		current: 20,
+	bl := &backlight.Backlight{
+		DevName: testDeviceName,
+		Max:     100,
+		Current: 20,
 	}
 
-	err = bl.restore(sysfsDir, stateDir)
+	err = bl.Restore(sysfsDir, stateDir)
 	requireNoError(t, err)
 
 	assertContainsInt(t, brightnessPath, 100)
