@@ -47,11 +47,6 @@ func run(args []string) error {
 			return err
 		}
 
-		err = bl.Write(baseBacklightDir)
-		if err != nil {
-			return err
-		}
-
 		err = bl.SaveState(stateDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to save state: %s\n", err)
@@ -65,7 +60,12 @@ func run(args []string) error {
 			return fmt.Errorf("error: 'get' takes no argument")
 		}
 
-		fmt.Fprintln(os.Stdout, bl.GetPercentage())
+		perc, err := bl.GetPercentage()
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintln(os.Stdout, perc)
 	case "restore":
 		// USAGE: brightctl restore
 		if len(cmdArgs) != 0 {
@@ -73,7 +73,7 @@ func run(args []string) error {
 			return fmt.Errorf("error: 'restore' takes no argument")
 		}
 
-		err := bl.Restore(baseBacklightDir, stateDir)
+		err := bl.Restore(stateDir)
 		if err != nil {
 			return err
 		}

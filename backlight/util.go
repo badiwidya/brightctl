@@ -10,7 +10,7 @@ import (
 func readIntFromFile(path string) (int, error) {
 	buffer, err := os.ReadFile(path)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read file %s: %w", path, err)
+		return 0, err
 	}
 
 	valStr := strings.TrimSpace(string(buffer))
@@ -20,4 +20,19 @@ func readIntFromFile(path string) (int, error) {
 	}
 
 	return valInt, nil
+}
+
+func writeIntToFile(path string, content int) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0o0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = fmt.Fprintf(f, "%d", content)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
