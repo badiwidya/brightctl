@@ -57,7 +57,7 @@ func (b *Backlight) Set(arg string) error {
 
 	val, err := strconv.ParseFloat(valStr, 64)
 	if err != nil {
-		return fmt.Errorf("error: invalid argument, expected a number")
+		return fmt.Errorf("invalid argument, expected a number")
 	}
 
 	if isPercent {
@@ -65,11 +65,11 @@ func (b *Backlight) Set(arg string) error {
 	}
 
 	if !isRelative && val < 0 {
-		return fmt.Errorf("error: absolute value cannot be negative")
+		return fmt.Errorf("absolute value cannot be negative")
 	}
 
 	if val > 1 || val < -1 {
-		return fmt.Errorf("error: value must be between +/- 100%% or +/- 1.0")
+		return fmt.Errorf("value must be between +/- 100%% or +/- 1.0")
 	}
 
 	delta := int(val * float64(b.Max))
@@ -106,12 +106,12 @@ func (b *Backlight) Restore(stateDir string) error {
 
 	lastBrightness, err := readIntFromFile(lastBrightnessPath)
 	if err != nil {
-		return fmt.Errorf("error: failed to restore last brightness: %w", err)
+		return fmt.Errorf("failed to restore last brightness: %w", err)
 	}
 
 	err = writeIntToFile(b.BrightnessPath, lastBrightness)
 	if err != nil {
-		return fmt.Errorf("error: failed to restore last brightness: %w", err)
+		return fmt.Errorf("failed to restore last brightness: %w", err)
 	}
 
 	return nil
@@ -151,7 +151,7 @@ func (b *Backlight) SaveState(stateDir string) error {
 func New(baseBacklightDir string) (*Backlight, error) {
 	backlightDirs, err := os.ReadDir(baseBacklightDir)
 	if err != nil {
-		return nil, fmt.Errorf("error: failed to list %s: %w", baseBacklightDir, err)
+		return nil, fmt.Errorf("failed to list %s: %w", baseBacklightDir, err)
 	}
 
 	var devName string
@@ -170,7 +170,7 @@ func New(baseBacklightDir string) (*Backlight, error) {
 	}
 
 	if devName == "" {
-		return nil, fmt.Errorf("error: no backlight device found in %s", baseBacklightDir)
+		return nil, fmt.Errorf("no backlight device found in %s", baseBacklightDir)
 	}
 
 	brightnessPath := filepath.Join(baseBacklightDir, devName, "brightness")

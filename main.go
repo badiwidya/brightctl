@@ -11,7 +11,7 @@ const appName = "brightctl"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
 	}
 }
@@ -21,7 +21,7 @@ func run(args []string) error {
 
 	if len(args) < 1 {
 		printUsage()
-		return fmt.Errorf("error: no command specified")
+		return fmt.Errorf("no command specified")
 	}
 
 	stateDir := getStateDir()
@@ -39,7 +39,7 @@ func run(args []string) error {
 		// USAGE: brightctl set ARG
 		if len(cmdArgs) != 1 {
 			printUsage()
-			return fmt.Errorf("error: 'set' requires exactly one argument")
+			return fmt.Errorf("'set' requires exactly one argument")
 		}
 
 		err = bl.Set(cmdArgs[0])
@@ -57,7 +57,7 @@ func run(args []string) error {
 		// USAGE: brightctl get
 		if len(cmdArgs) != 0 {
 			printUsage()
-			return fmt.Errorf("error: 'get' takes no argument")
+			return fmt.Errorf("'get' takes no argument")
 		}
 
 		perc, err := bl.GetPercentage()
@@ -70,7 +70,7 @@ func run(args []string) error {
 		// USAGE: brightctl restore
 		if len(cmdArgs) != 0 {
 			printUsage()
-			return fmt.Errorf("error: 'restore' takes no argument")
+			return fmt.Errorf("'restore' takes no argument")
 		}
 
 		err := bl.Restore(stateDir)
